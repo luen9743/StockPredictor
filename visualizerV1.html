@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Price Prediction Visualizer</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
+</head>
+<body>
+
+    <div>
+        <label for="ticker">Stock Ticker:</label>
+        <input type="text" id="ticker" />
+    </div>
+	<div>
+		<label for="start_date">Start Date:</label>
+		<input type="date" id="start_date" />
+	</div>
+    <div>
+        <label for="future-date">Future Date:</label>
+        <input type="date" id="future-date" />
+    </div>
+    <button id="submit">Submit</button>
+    <canvas id="chart"></canvas>
+
+    <script>
+        const API_KEY = 'pk_a7fff81176f84737a036c31ae99ff751';
+
+        let chart;
+
+		async function fetchStockData(ticker, startDate) {
+			// Format the date as YYYYMMDD
+			const formattedStartDate = startDate.toISOString().slice(0, 10).replace(/-/g, '');
+
+			const response = await fetch(`https://cloud.iexapis.com/stable/stock/${ticker}/chart/date/${formattedStartDate}?chartByDay=true&token=${encodeURIComponent(API_KEY)}`);
+
+			if (!response.ok) {
+				const errorMessage = await response.text();
+				console.error('Error fetching stock data:', errorMessage);
+				throw new Error(errorMessage);
+			}
+
+			const data = await response.json();
+
+			return data.map(d => ({ date: new Date(d.date), close: d.close }));
+		}
+
+
+
+        function linearExtrapolation(data, futureDate) {
+            return data[data.length - 1].close;
+        }
+
+        async function plotChart(ticker, startDate, futureDate) {
+		try {
+			const data = await fetchStockData(ticker, startDate);
+
+			if (data.length === 0) {
+				console.error('No data available for the given date range.');
+				return;
+			}
+
+			const futurePrice = linearExtrapolation(data, futureDate);
+
+			// Add the future prediction to the data
+			data.push({ date: futureDate, close: futurePrice });
+
+			const ctx = document.getElementById('chart').getContext('2d');
+			if (chart) chart.destroy(); // Remove old chart if exists
+
+			chart = new Chart(ctx, {
+				type: 'line',
+				data: {
+					labels: data.map(d => d.date),
+					datasets: [{
+						label: ticker,
+						data: data.map(d => d.close),
+						fill: false,
+						borderColor: 'rgb(75, 192, 192)',
+						tension: 0.1
+					}]
+				},
+				options: {
+					scales: {
+						x: { type: 'time' },
+						y: { beginAtZero: true }
+					}
+				}
+			});
+		} catch (error) {
+			console.error('Error in plotChart:', error);
+		}
+	}
+
+
+	$('#submit').click(async () => {
+		const ticker = $('#ticker').val();
+		const startDate = new Date($('#start_date').val()); // Convert the string to a Date object
+		const futureDate = new Date($('#future-date').val()); // Fix the ID here as well
+		console.log('Ticker:', ticker);
+		console.log('Start Date:', startDate);
+		console.log('Future Date:', futureDate);
+
+		await plotChart(ticker, startDate, futureDate);
+	});
+
+
+
+    </script>
+</body>
